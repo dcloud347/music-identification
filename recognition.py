@@ -5,8 +5,13 @@ import tensorflow as tf
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Conv1D, BatchNormalization, MaxPooling1D, GlobalMaxPooling1D, Dense, Dropout
 from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 import numpy as np
 import random
+from sklearn.metrics import confusion_matrix
 
 SEED = 1
 
@@ -43,7 +48,7 @@ def load_song(song_folder):
                 signal, sr = librosa.load(
                     os.path.join(genre_folder, song))
                 melspec = librosa.feature.melspectrogram(
-                    signal, sr=sr).T[:1100, ]
+                    signal, sr=sr).T[:1050, ]
                 song_specs.append(melspec)
                 genres.append(genre_to_idx[genre])
 
@@ -51,7 +56,6 @@ def load_song(song_folder):
 
 
 song_specs, genres, genre_to_idx, idx_to_genre = load_song("./data/music")
-
 plt.rcParams["figure.figsize"] = (12, 8)
 
 
@@ -73,7 +77,6 @@ def show_spectrogram(genre_name):
     plt.show()
 
 
-show_spectrogram("pop")
 tf.random.set_seed(SEED)
 
 
@@ -97,7 +100,7 @@ def cnn_model(input_shape):
         x = Dense(256, activation='relu')(x)
         x = Dropout(0.5)(x)
 
-    labels = Dense(10, activation='softmax')(x)
+    labels = Dense(6, activation='softmax')(x)
 
     model = Model(inputs=[inputs], outputs=[labels])
 
@@ -108,5 +111,51 @@ def cnn_model(input_shape):
     return model
 
 
-model = cnn_model((128, 128))
+model = cnn_model((105, 128))
 model.summary()
+
+
+def split_10(x, y):
+    s = x.shape
+    s = (s[0] * 10, s[1] // 10, s[2])
+    return x.reshape(s), np.repeat(y, 10, axis=0)
+
+
+genres_one_hot = to_categorical(genres, num_classes=len(genre_to_idx))
+x_train, x_test, y_train, y_test = train_test_split(
+    np.array(song_specs), np.array(genres_one_hot),
+    test_size=0.2, stratify=genres)
+x_train, y_train = split_10(x_train, y_train)
+x_test, y_test = split_10(x_test, y_test)
+
+early_stop = EarlyStopping(monitor='val_loss',
+                           min_delta=0,
+                           patience=3,
+                           verbose=0,
+                           mode='auto')
+
+history = model.fit(x_train, y_train,
+                    batch_size=105,
+                    epochs=12,
+                    verbose=1,
+                    validation_data=(x_test, y_test),
+                    callbacks=[early_stop])
+model.save("music_recognition.h2")
+
+
+def unsplit(values):
+    chunks = np.split(values, 12)
+    return np.array([np.argmax(chunk) % 6 for chunk in chunks])
+
+
+pred_values = model.predict(x_test)
+predictions = unsplit(pred_values)
+truth = unsplit(y_test)
+print("accuracy_score:", accuracy_score(predictions, truth))
+cm = confusion_matrix(np.argmax(pred_values, axis=1), np.argmax(y_test, axis=1))
+print(cm)
+plt.imshow(cm.T, interpolation='nearest', cmap='gray')
+plt.xticks(np.arange(0, len(idx_to_genre)), idx_to_genre)
+plt.yticks(np.arange(0, len(idx_to_genre)), idx_to_genre)
+
+plt.show()
