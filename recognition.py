@@ -35,10 +35,10 @@ def listdir(path):
 
 
 def load_song(song_folder):
-    song_specs = []  # array shape (60, 1050, 128)
-    idx_to_genre = []  # {g for g in ls}
-    genre_to_idx = {}  # {v: k for k, v in enumerate(ls)}
-    genres = []  # [j for j in range(10) for i in range(10)]
+    song_specs = []
+    idx_to_genre = []
+    genre_to_idx = {}
+    genres = []
 
     for genre in listdir(song_folder):
         genre_to_idx[genre] = len(genre_to_idx)
@@ -137,7 +137,7 @@ early_stop = EarlyStopping(monitor='val_loss',
                            mode='auto')
 
 history = model.fit(x_train, y_train,
-                    batch_size=105,
+                    batch_size=SIZE // 10,
                     epochs=int(len(idx_to_genre)*10*test_size),
                     verbose=1,
                     validation_data=(x_test, y_test),
