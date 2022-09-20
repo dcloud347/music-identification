@@ -17,6 +17,7 @@ SEED = 1
 
 random.seed(SEED)
 np.random.seed(SEED)
+SIZE = 1050
 
 
 def listdir(path):
@@ -34,7 +35,7 @@ def listdir(path):
 
 
 def load_song(song_folder):
-    song_specs = []  # array shape (1000, 1280, 128)
+    song_specs = []  # array shape (60, 1050, 128)
     idx_to_genre = []  # {g for g in ls}
     genre_to_idx = {}  # {v: k for k, v in enumerate(ls)}
     genres = []  # [j for j in range(10) for i in range(10)]
@@ -48,7 +49,7 @@ def load_song(song_folder):
                 signal, sr = librosa.load(
                     os.path.join(genre_folder, song))
                 melspec = librosa.feature.melspectrogram(
-                    signal, sr=sr).T[:1050, ]
+                    signal, sr=sr).T[:SIZE, ]
                 song_specs.append(melspec)
                 genres.append(genre_to_idx[genre])
 
@@ -65,7 +66,7 @@ def show_spectrogram(genre_name):
     for spec, idx in zip(song_specs, genres):
         if idx == genre_idx:
             specs.append(spec)
-            if len(specs) >= 25:
+            if len(specs) >= 10:
                 break
     if not specs:
         raise ValueError("specs not found")
@@ -92,15 +93,15 @@ def cnn_model(input_shape):
         x = MaxPooling1D(pool_size=2, strides=2)(x)
         levels *= 2
 
-    # Global -> shape(128)
+    # Global -> shape(105)
     x = GlobalMaxPooling1D()(x)
 
     # 计算类型标签的全连接网络
     for fc in range(2):
-        x = Dense(256, activation='relu')(x)
+        x = Dense(512, activation='relu')(x)
         x = Dropout(0.5)(x)
 
-    labels = Dense(6, activation='softmax')(x)
+    labels = Dense(len(idx_to_genre), activation='softmax')(x)
 
     model = Model(inputs=[inputs], outputs=[labels])
 
@@ -111,7 +112,7 @@ def cnn_model(input_shape):
     return model
 
 
-model = cnn_model((105, 128))
+model = cnn_model((SIZE // 10, 128))
 model.summary()
 
 
@@ -121,10 +122,11 @@ def split_10(x, y):
     return x.reshape(s), np.repeat(y, 10, axis=0)
 
 
+test_size = 0.2
 genres_one_hot = to_categorical(genres, num_classes=len(genre_to_idx))
 x_train, x_test, y_train, y_test = train_test_split(
     np.array(song_specs), np.array(genres_one_hot),
-    test_size=0.2, stratify=genres)
+    test_size=test_size, stratify=genres)
 x_train, y_train = split_10(x_train, y_train)
 x_test, y_test = split_10(x_test, y_test)
 
@@ -136,7 +138,7 @@ early_stop = EarlyStopping(monitor='val_loss',
 
 history = model.fit(x_train, y_train,
                     batch_size=105,
-                    epochs=12,
+                    epochs=int(len(idx_to_genre)*10*test_size),
                     verbose=1,
                     validation_data=(x_test, y_test),
                     callbacks=[early_stop])
@@ -144,8 +146,8 @@ model.save("music_recognition.h2")
 
 
 def unsplit(values):
-    chunks = np.split(values, 12)
-    return np.array([np.argmax(chunk) % 6 for chunk in chunks])
+    chunks = np.split(values, 10)
+    return np.array([np.argmax(chunk) % len(idx_to_genre) for chunk in chunks])
 
 
 pred_values = model.predict(x_test)
