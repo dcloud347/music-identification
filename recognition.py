@@ -1,4 +1,5 @@
 import os
+
 import librosa
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -12,26 +13,13 @@ from sklearn.metrics import accuracy_score
 import numpy as np
 import random
 from sklearn.metrics import confusion_matrix
+from utils import listdir, unsplit
 
 SEED = 1
 
 random.seed(SEED)
 np.random.seed(SEED)
-SIZE = 1050
-
-
-def listdir(path):
-    """os.listdir with ".DS_Store" removed
-
-    :param path: a str, bytes, or a path-like object
-    :return: a list containing the names of the files in the directory.
-    """
-    ls = os.listdir(path)
-    try:
-        ls.remove(".DS_Store")
-    except ValueError as e:
-        pass
-    return ls
+SIZE = 1200
 
 
 def load_song(song_folder):
@@ -39,7 +27,6 @@ def load_song(song_folder):
     idx_to_genre = []
     genre_to_idx = {}
     genres = []
-
     for genre in listdir(song_folder):
         genre_to_idx[genre] = len(genre_to_idx)
         idx_to_genre.append(genre)
@@ -52,7 +39,6 @@ def load_song(song_folder):
                     signal, sr=sr).T[:SIZE, ]
                 song_specs.append(melspec)
                 genres.append(genre_to_idx[genre])
-
     return song_specs, genres, genre_to_idx, idx_to_genre
 
 
@@ -122,7 +108,7 @@ def split_10(x, y):
     return x.reshape(s), np.repeat(y, 10, axis=0)
 
 
-test_size = 0.2
+test_size = 0.15
 genres_one_hot = to_categorical(genres, num_classes=len(genre_to_idx))
 x_train, x_test, y_train, y_test = train_test_split(
     np.array(song_specs), np.array(genres_one_hot),
@@ -138,23 +124,17 @@ early_stop = EarlyStopping(monitor='val_loss',
 
 history = model.fit(x_train, y_train,
                     batch_size=SIZE // 10,
-                    epochs=int(len(idx_to_genre)*10*test_size),
+                    epochs=int(len(genres) * test_size),
                     verbose=1,
                     validation_data=(x_test, y_test),
                     callbacks=[early_stop])
 model.save("music_recognition.h2")
 
-
-def unsplit(values):
-    chunks = np.split(values, 10)
-    return np.array([np.argmax(chunk) % len(idx_to_genre) for chunk in chunks])
-
-
 pred_values = model.predict(x_test)
 predictions = unsplit(pred_values)
 truth = unsplit(y_test)
 print("accuracy_score:", accuracy_score(predictions, truth))
-cm = confusion_matrix(np.argmax(pred_values, axis=1), np.argmax(y_test, axis=1))
+cm = confusion_matrix(np.argmax(y_test, axis=1), np.argmax(pred_values, axis=1))
 print(cm)
 plt.imshow(cm.T, interpolation='nearest', cmap='gray')
 plt.xticks(np.arange(0, len(idx_to_genre)), idx_to_genre)
