@@ -31,14 +31,11 @@ def split_10(x):
     return x.reshape(s)
 
 
-# !/usr/bin/python3
-
-# list中count(a)函数: 统计 a在list中出现的次数
 def find_mode(lst):
     return max(lst, default='列表为空', key=lambda v: lst.count(v))
 
 
-test_data = np.array([test("rock")])
+test_data = np.array([test("reggae")])
 test_data = split_10(test_data)
 predict_result = model.predict(test_data)
 predictions = unsplit(predict_result)
